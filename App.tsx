@@ -501,7 +501,14 @@ const App: React.FC = () => {
     previousImageBase64?: { base64: string; mimeType: string }
   ): Promise<{ downloadUrl: string; processedSize: number; }> => {
       onProgress(10);
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
+      // Sử dụng import.meta.env cho các biến môi trường phía client trong Vite.
+      // Tên biến VITE_GEMINI_API_KEY được suy ra từ log build của người dùng trên Netlify.
+      // FIX: Adhering to the API key guideline to use process.env.API_KEY exclusively, which also fixes the TypeScript error.
+      const apiKey = process.env.API_KEY;
+      if (!apiKey) {
+        throw new Error("An API Key must be set when running in a browser");
+      }
+      const ai = new GoogleGenAI({ apiKey });
       onProgress(20);
 
       const parts = [];
