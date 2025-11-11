@@ -72,7 +72,7 @@ const AccessControl: React.FC<AccessControlProps> = ({ onLogin }) => {
           </form>
         </div>
          <footer className="text-center mt-12 text-gray-500 text-sm">
-            <p>&copy; 2025 Hai Pham - PDF Toolkit.</p>
+            <p>&copy; Hai Pham - PDF Toolkit V4 11.11.2025 </p>
         </footer>
       </div>
     </div>

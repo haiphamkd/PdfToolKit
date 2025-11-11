@@ -501,13 +501,16 @@ const App: React.FC = () => {
     previousImageBase64?: { base64: string; mimeType: string }
   ): Promise<{ downloadUrl: string; processedSize: number; }> => {
       onProgress(10);
-      // Sử dụng import.meta.env cho các biến môi trường phía client trong Vite.
-      // Tên biến VITE_GEMINI_API_KEY được suy ra từ log build của người dùng trên Netlify.
-      // FIX: Adhering to the API key guideline to use process.env.API_KEY exclusively, which also fixes the TypeScript error.
-      const apiKey = process.env.API_KEY;
+      
+      // Sử dụng `import.meta.env` để truy cập các biến môi trường phía client trên các nền tảng như Netlify/Vite.
+      // Dùng `(import.meta as any)` để tránh lỗi TypeScript nếu `tsconfig` không được cấu hình cho Vite.
+      const apiKey = (import.meta as any).env.VITE_GEMINI_API_KEY;
+
       if (!apiKey) {
-        throw new Error("An API Key must be set when running in a browser");
+        console.error("Lỗi cấu hình: Biến môi trường VITE_GEMINI_API_KEY chưa được đặt. Hãy đảm bảo bạn đã cấu hình nó trong phần cài đặt của Netlify.");
+        throw new Error("Lỗi cấu hình: Không tìm thấy API Key. Vui lòng kiểm tra lại cấu hình trên Netlify.");
       }
+      
       const ai = new GoogleGenAI({ apiKey });
       onProgress(20);
 
