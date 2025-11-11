@@ -1,0 +1,5 @@
+{
+  "name": "Trình Nén PDF Hàng Loạt V4.P",
+  "description": "Một ứng dụng web đơn giản để nén nhiều tệp PDF cùng một lúc, giúp giảm kích thước tệp một cách hiệu quả. Tải lên tệp của bạn, nhấn nén và tải xuống các phiên bản được tối ưu hóa.",
+  "requestFramePermissions": []
+}
