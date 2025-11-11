@@ -1,11 +1,11 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { User, ProcessedFile, FileStatus, CompressionLevel, AppMode, UserPermissions, EnhancementStep } from './types';
-import FileUpload from './components/FileUpload';
-import FileItem from './components/FileItem';
-import AccessControl from './components/AccessControl';
-import AdminPanel from './components/AdminPanel';
-import { HPLogo } from './components/HPLogo';
-import { LogOutIcon, UsersIcon, CompressIcon, MergeIcon, ImageToPdfIcon, ArrowLeftIcon, WandIcon, PieChartIcon, XIcon } from './components/icons';
+import FileUpload from './components/FileUpload.tsx';
+import FileItem from './components/FileItem.tsx';
+import AccessControl from './components/AccessControl.tsx';
+import AdminPanel from './components/AdminPanel.tsx';
+import { HPLogo } from './components/HPLogo.tsx';
+import { LogOutIcon, UsersIcon, CompressIcon, MergeIcon, ImageToPdfIcon, ArrowLeftIcon, WandIcon, PieChartIcon, XIcon } from './components/icons.tsx';
 import { GoogleGenAI, Modality } from "@google/genai";
 
 // Khai báo các thư viện được tải từ CDN trên đối tượng window
