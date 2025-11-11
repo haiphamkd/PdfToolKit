@@ -493,6 +493,43 @@ const App: React.FC = () => {
       setIsProcessing(false);
     }
   };
+
+  const getAIEnhancementErrorMessage = (error: unknown): string => {
+    const errorMessage = (error as Error).message || 'Đã xảy ra lỗi không xác định.';
+
+    if (errorMessage.includes("RESOURCE_EXHAUSTED") || errorMessage.includes("429") || errorMessage.includes("quota")) {
+      return "Bạn đã vượt quá hạn mức sử dụng API. Vui lòng kiểm tra gói cước và thông tin thanh toán trong tài khoản Google AI của bạn. Thông thường, bạn cần bật thanh toán (Billing) cho dự án trên Google Cloud để sử dụng tính năng này.";
+    }
+
+    if (errorMessage.includes("API Key not valid")) {
+      return "API Key không hợp lệ. Vui lòng kiểm tra lại biến môi trường VITE_GEMINI_API_KEY trên Netlify.";
+    }
+
+    if (errorMessage.includes("Yêu cầu bị chặn")) {
+      return `Yêu cầu của bạn đã bị chặn bởi bộ lọc an toàn của AI. Chi tiết: ${errorMessage}`;
+    }
+
+    if (errorMessage.includes("Không nhận được ảnh")) {
+      return `AI không thể tạo ảnh cho yêu cầu này. Vui lòng thử lại với một ảnh hoặc yêu cầu khác. Chi tiết: ${errorMessage}`;
+    }
+
+    // Cố gắng phân tích cú pháp nếu lỗi là một chuỗi JSON
+    if (errorMessage.trim().startsWith('{')) {
+      try {
+        const errorObj = JSON.parse(errorMessage);
+        if (errorObj.error?.message) {
+          // Làm cho thông điệp lỗi API dễ đọc hơn
+          const apiMsg = errorObj.error.message.replace(/(\r\n|\n|\r)/gm, " ").replace(/\s+/g, ' ');
+          return `Lỗi từ Google AI: ${apiMsg}`;
+        }
+      } catch (e) {
+        // Bỏ qua lỗi phân tích cú pháp
+      }
+    }
+    
+    // Fallback
+    return errorMessage;
+  };
   
   const enhanceImageFile = async (
     file: ProcessedFile,
@@ -502,8 +539,6 @@ const App: React.FC = () => {
   ): Promise<{ downloadUrl: string; processedSize: number; }> => {
       onProgress(10);
       
-      // Sử dụng `import.meta.env` để truy cập các biến môi trường phía client trên các nền tảng như Netlify/Vite.
-      // Dùng `(import.meta as any)` để tránh lỗi TypeScript nếu `tsconfig` không được cấu hình cho Vite.
       const apiKey = (import.meta as any).env.VITE_GEMINI_API_KEY;
 
       if (!apiKey) {
@@ -596,8 +631,10 @@ const App: React.FC = () => {
             enhancementHistory: [newHistoryEntry]
         } : f));
     } catch (error) {
-        console.error(`Lỗi khi làm nét ảnh ${fileToEnhance.file.name}:`, error);
-        alert(`Lỗi khi làm nét ảnh ${fileToEnhance.file.name}:\n${(error as Error).message}`);
+        const fileWithError = files.find(f => f.id === id)!;
+        console.error(`Lỗi khi làm nét ảnh ${fileWithError.file.name}:`, error);
+        const userFriendlyMessage = getAIEnhancementErrorMessage(error);
+        alert(`Lỗi khi làm nét ảnh ${fileWithError.file.name}:\n${userFriendlyMessage}`);
         setFiles(prev => prev.map(f => f.id === id ? { ...f, status: FileStatus.Error, progress: 0 } : f));
     }
   };
@@ -633,8 +670,10 @@ const App: React.FC = () => {
           } : f));
 
       } catch (error) {
-          console.error(`Lỗi khi tinh chỉnh ảnh ${fileToEnhance.file.name}:`, error);
-          alert(`Lỗi khi tinh chỉnh ảnh ${fileToEnhance.file.name}:\n${(error as Error).message}`);
+          const fileWithError = files.find(f => f.id === id)!;
+          console.error(`Lỗi khi tinh chỉnh ảnh ${fileWithError.file.name}:`, error);
+          const userFriendlyMessage = getAIEnhancementErrorMessage(error);
+          alert(`Lỗi khi tinh chỉnh ảnh ${fileWithError.file.name}:\n${userFriendlyMessage}`);
           setFiles(prev => prev.map(f => f.id === id ? { ...f, status: FileStatus.Error, progress: 0 } : f));
       }
   };
@@ -666,7 +705,8 @@ const App: React.FC = () => {
             } : f)))
         }).catch(error => {
             console.error(`Lỗi khi làm nét ảnh ${file.file.name}:`, error);
-            alert(`Lỗi khi làm nét ảnh ${file.file.name}:\n${(error as Error).message}`);
+            const userFriendlyMessage = getAIEnhancementErrorMessage(error);
+            alert(`Lỗi khi làm nét ảnh ${file.file.name}:\n${userFriendlyMessage}`);
             setFiles(prev => prev.map(f => f.id === file.id ? { ...f, status: FileStatus.Error, progress: 0 } : f));
         })
     );
