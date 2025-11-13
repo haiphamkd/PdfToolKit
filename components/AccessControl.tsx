@@ -2,18 +2,19 @@ import React, { useState } from 'react';
 import { HPLogo } from './HPLogo';
 
 interface AccessControlProps {
-  onLogin: (username: string, password: string) => boolean;
+  onLogin: (username: string, password: string, rememberMe: boolean) => boolean;
 }
 
 const AccessControl: React.FC<AccessControlProps> = ({ onLogin }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    const success = onLogin(username, password);
+    const success = onLogin(username, password, rememberMe);
     if (!success) {
       setError('Tên đăng nhập hoặc mật khẩu không hợp lệ.');
     }
@@ -60,6 +61,20 @@ const AccessControl: React.FC<AccessControlProps> = ({ onLogin }) => {
                 required
               />
             </div>
+            
+            <div className="flex items-center text-left">
+              <input
+                id="remember-me"
+                type="checkbox"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+                className="h-4 w-4 rounded border-secondary bg-primary/70 text-accent focus:ring-accent focus:ring-offset-primary"
+              />
+              <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-400 cursor-pointer select-none">
+                Ghi nhớ đăng nhập
+              </label>
+            </div>
+
             {error && (
               <p className="text-sm text-red-500 text-left">{error}</p>
             )}

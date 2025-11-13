@@ -84,6 +84,18 @@ const App: React.FC = () => {
   const dragOverItem = useRef<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
+  // Kiểm tra phiên đăng nhập đã lưu khi ứng dụng khởi động
+  useEffect(() => {
+    const savedUsername = localStorage.getItem('pdfCompressorCurrentUser') || sessionStorage.getItem('pdfCompressorCurrentUser');
+    if (savedUsername) {
+      const user = users.find(u => u.username === savedUsername);
+      if (user) {
+        setCurrentUser(user);
+        setIsLoggedIn(true);
+      }
+    }
+  }, [users]);
+
   // Lưu trạng thái người dùng vào localStorage mỗi khi có thay đổi.
   useEffect(() => {
     try {
@@ -99,11 +111,18 @@ const App: React.FC = () => {
     }
   }, []);
 
-  const handleLogin = (username: string, password: string): boolean => {
+  const handleLogin = (username: string, password: string, rememberMe: boolean): boolean => {
     const user = users.find(u => u.username === username && u.password === password);
     if (user) {
       setCurrentUser(user);
       setIsLoggedIn(true);
+      
+      // Lưu thông tin đăng nhập
+      if (rememberMe) {
+        localStorage.setItem('pdfCompressorCurrentUser', username);
+      } else {
+        sessionStorage.setItem('pdfCompressorCurrentUser', username);
+      }
       return true;
     }
     return false;
@@ -114,6 +133,9 @@ const App: React.FC = () => {
     setIsLoggedIn(false);
     setFiles([]);
     setAppMode(null);
+    // Xóa thông tin đăng nhập đã lưu
+    localStorage.removeItem('pdfCompressorCurrentUser');
+    sessionStorage.removeItem('pdfCompressorCurrentUser');
   };
   
   const handleUpdateUserPermissions = (username: string, permissions: UserPermissions) => {
