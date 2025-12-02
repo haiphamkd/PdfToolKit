@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { User, ProcessedFile, FileStatus, CompressionLevel, AppMode, UserPermissions, EnhancementStep } from './types';
 import FileUpload from './components/FileUpload.tsx';
@@ -59,7 +60,20 @@ const App: React.FC = () => {
   const [users, setUsers] = useState<User[]>(() => {
     try {
       const storedUsers = localStorage.getItem('pdfCompressorUsers');
-      return storedUsers ? JSON.parse(storedUsers) : initialUsers;
+      if (storedUsers) {
+        const parsedUsers: any[] = JSON.parse(storedUsers);
+        // Migration: Đảm bảo tất cả người dùng (đặc biệt là từ localStorage cũ) đều có quyền canExtract
+        return parsedUsers.map(u => ({
+          ...u,
+          permissions: {
+            ...DEFAULT_USER_PERMISSIONS, // Lấy giá trị mặc định làm nền
+            ...u.permissions, // Ghi đè bằng quyền hiện có
+            // HOTFIX: Nếu user là admin, BẮT BUỘC bật quyền canExtract để tránh lỗi dữ liệu cũ khóa tính năng
+            canExtract: u.username === 'admin' ? true : (u.permissions?.canExtract !== undefined ? u.permissions.canExtract : true)
+          }
+        }));
+      }
+      return initialUsers;
     } catch (error) {
       console.error("Lỗi khi đọc người dùng từ localStorage:", error);
       return initialUsers;
@@ -142,6 +156,10 @@ const App: React.FC = () => {
   
   const handleUpdateUserPermissions = (username: string, permissions: UserPermissions) => {
     setUsers(users.map(u => u.username === username ? { ...u, permissions } : u));
+    // Cập nhật ngay lập tức nếu đang là người dùng hiện tại
+    if (currentUser && currentUser.username === username) {
+        setCurrentUser({ ...currentUser, permissions });
+    }
   };
   
   const handleAddUser = (newUser: Pick<User, 'username' | 'password'>): { success: boolean, message: string } => {

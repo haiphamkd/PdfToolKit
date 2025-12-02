@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { User, UserPermissions } from '../types';
 import { TrashIcon, XIcon, KeyIcon } from './icons';
@@ -170,60 +171,54 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, currentUser, onAddUser, 
                             type="checkbox"
                             checked={user.permissions.canCompressBatch}
                             onChange={(e) => handlePermissionChange(user.username, 'canCompressBatch', e.target.checked)}
-                            disabled={user.username === currentUser.username}
                             className="form-checkbox h-4 w-4 rounded bg-primary/70 border-secondary text-accent focus:ring-accent disabled:opacity-50"
                         />
-                        <span className={user.username === currentUser.username ? 'text-gray-500' : ''}>Nén PDF</span>
+                        <span>Nén PDF</span>
                     </label>
                      <label className="flex items-center space-x-2 cursor-pointer">
                         <input 
                             type="checkbox"
                             checked={user.permissions.canDownloadBatch}
                             onChange={(e) => handlePermissionChange(user.username, 'canDownloadBatch', e.target.checked)}
-                            disabled={user.username === currentUser.username}
                             className="form-checkbox h-4 w-4 rounded bg-primary/70 border-secondary text-accent focus:ring-accent disabled:opacity-50"
                         />
-                        <span className={user.username === currentUser.username ? 'text-gray-500' : ''}>Tải về</span>
+                        <span>Tải về</span>
                     </label>
                     <label className="flex items-center space-x-2 cursor-pointer">
                         <input 
                             type="checkbox"
                             checked={user.permissions.canMerge}
                             onChange={(e) => handlePermissionChange(user.username, 'canMerge', e.target.checked)}
-                            disabled={user.username === currentUser.username}
                             className="form-checkbox h-4 w-4 rounded bg-primary/70 border-secondary text-accent focus:ring-accent disabled:opacity-50"
                         />
-                        <span className={user.username === currentUser.username ? 'text-gray-500' : ''}>Gộp PDF</span>
+                        <span>Gộp PDF</span>
                     </label>
                     <label className="flex items-center space-x-2 cursor-pointer">
                         <input 
                             type="checkbox"
                             checked={user.permissions.canExtract}
                             onChange={(e) => handlePermissionChange(user.username, 'canExtract', e.target.checked)}
-                            disabled={user.username === currentUser.username}
                             className="form-checkbox h-4 w-4 rounded bg-primary/70 border-secondary text-accent focus:ring-accent disabled:opacity-50"
                         />
-                        <span className={user.username === currentUser.username ? 'text-gray-500' : ''}>Trích xuất</span>
+                        <span>Trích xuất</span>
                     </label>
                     <label className="flex items-center space-x-2 cursor-pointer">
                         <input 
                             type="checkbox"
                             checked={user.permissions.canConvertToPdf}
                             onChange={(e) => handlePermissionChange(user.username, 'canConvertToPdf', e.target.checked)}
-                            disabled={user.username === currentUser.username}
                             className="form-checkbox h-4 w-4 rounded bg-primary/70 border-secondary text-accent focus:ring-accent disabled:opacity-50"
                         />
-                        <span className={user.username === currentUser.username ? 'text-gray-500' : ''}>Ảnh &gt; PDF</span>
+                        <span>Ảnh &gt; PDF</span>
                     </label>
                     <label className="flex items-center space-x-2 cursor-pointer">
                         <input 
                             type="checkbox"
                             checked={user.permissions.canEnhanceImage}
                             onChange={(e) => handlePermissionChange(user.username, 'canEnhanceImage', e.target.checked)}
-                            disabled={user.username === currentUser.username}
                             className="form-checkbox h-4 w-4 rounded bg-primary/70 border-secondary text-accent focus:ring-accent disabled:opacity-50"
                         />
-                        <span className={user.username === currentUser.username ? 'text-gray-500' : ''}>Làm Nét</span>
+                        <span>Làm Nét</span>
                     </label>
                 </div>
               </div>
