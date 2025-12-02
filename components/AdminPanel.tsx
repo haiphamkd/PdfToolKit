@@ -213,7 +213,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, currentUser, onAddUser, 
                             disabled={user.username === currentUser.username}
                             className="form-checkbox h-4 w-4 rounded bg-primary/70 border-secondary text-accent focus:ring-accent disabled:opacity-50"
                         />
-                        <span className={user.username === currentUser.username ? 'text-gray-500' : ''}>Ảnh > PDF</span>
+                        <span className={user.username === currentUser.username ? 'text-gray-500' : ''}>Ảnh &gt; PDF</span>
                     </label>
                     <label className="flex items-center space-x-2 cursor-pointer">
                         <input 
