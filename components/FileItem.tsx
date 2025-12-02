@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
 import { ProcessedFile, FileStatus, User, AppMode } from '../types';
-import { PdfIcon, DownloadIcon, TrashIcon, CheckCircleIcon, XCircleIcon, ClockIcon, GripVerticalIcon, SendIcon } from './icons';
+import { PdfIcon, DownloadIcon, TrashIcon, CheckCircleIcon, XCircleIcon, ClockIcon, GripVerticalIcon, SendIcon, SplitIcon } from './icons';
 
 interface FileItemProps {
   processedFile: ProcessedFile;
   onRemove: (id: string) => void;
   onCompressSingle: (id: string) => void;
   onEnhanceSingle: (id: string) => void;
+  onExtractSingle: (id: string, customRange?: string) => void;
+  onUpdatePageRange: (id: string, range: string) => void;
   onSendEnhancementPrompt: (id: string, prompt: string) => void;
   currentUser: User;
   appMode: AppMode;
@@ -41,6 +43,8 @@ const FileItem: React.FC<FileItemProps> = ({
   onRemove,
   onCompressSingle,
   onEnhanceSingle,
+  onExtractSingle,
+  onUpdatePageRange,
   onSendEnhancementPrompt,
   appMode,
   index,
@@ -50,9 +54,11 @@ const FileItem: React.FC<FileItemProps> = ({
   onDragLeave,
   isDragOver,
 }) => {
-  const { file, status, originalSize, compressedSize, downloadUrl, id, progress, enhancementHistory } = processedFile;
+  const { file, status, originalSize, compressedSize, downloadUrl, id, progress, enhancementHistory, extractPageRange, pageCount } = processedFile;
   const reduction = originalSize && compressedSize ? ((originalSize - compressedSize) / originalSize) * 100 : 0;
   const [prompt, setPrompt] = useState('');
+  const [showQuickExtract, setShowQuickExtract] = useState(false);
+  const [quickExtractRange, setQuickExtractRange] = useState('');
 
   const handlePromptSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -64,6 +70,12 @@ const FileItem: React.FC<FileItemProps> = ({
 
   const handleSuggestionClick = (suggestionPrompt: string) => {
     onSendEnhancementPrompt(id, suggestionPrompt);
+  };
+  
+  const handleQuickExtractSubmit = () => {
+    if (quickExtractRange.trim()) {
+        onExtractSingle(id, quickExtractRange);
+    }
   };
 
   const StatusIndicator = () => {
@@ -88,6 +100,18 @@ const FileItem: React.FC<FileItemProps> = ({
                 aria-label={`Làm nét ảnh ${file.name}`}
               >
                 Làm nét
+              </button>
+            );
+        }
+        if (appMode === 'extract') {
+            return (
+              <button
+                onClick={() => onExtractSingle(id)}
+                disabled={!extractPageRange || extractPageRange.trim() === ''}
+                className="px-3 py-1 text-xs font-semibold rounded-md text-accent-foreground bg-accent hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-accent"
+                aria-label={`Trích xuất tệp ${file.name}`}
+              >
+                Trích xuất
               </button>
             );
         }
@@ -131,7 +155,7 @@ const FileItem: React.FC<FileItemProps> = ({
   };
 
   const showDragHandle = appMode === 'merge' || appMode === 'imageToPdf';
-  const isDownloadable = status === FileStatus.Done && downloadUrl && appMode === 'compress';
+  const isDownloadable = status === FileStatus.Done && downloadUrl && (appMode === 'compress' || appMode === 'extract' || appMode === 'merge');
   
   const isEnhancementDone = appMode === 'enhanceImage' && status === FileStatus.Done && enhancementHistory && enhancementHistory.length > 0;
   const latestImageUrl = isEnhancementDone ? enhancementHistory![enhancementHistory!.length - 1].imageUrl : undefined;
@@ -142,7 +166,8 @@ const FileItem: React.FC<FileItemProps> = ({
   if (isEnhancementDone) {
     return (
       <div className="bg-secondary/50 p-4 rounded-lg flex flex-col space-y-4">
-        <div className="flex items-start justify-between">
+        {/* ... Enhancement Image UI (no change) ... */}
+         <div className="flex items-start justify-between">
             <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-primary-foreground truncate" title={file.name}>{file.name}</p>
                 <p className="text-xs text-gray-400">{formatBytes(originalSize)}</p>
@@ -204,7 +229,6 @@ const FileItem: React.FC<FileItemProps> = ({
               </form>
             </div>
         )}
-
       </div>
     );
   }
@@ -216,49 +240,99 @@ const FileItem: React.FC<FileItemProps> = ({
       onDragOver={onDragOver}
       onDrop={onDrop}
       onDragLeave={onDragLeave}
-      className={`relative bg-secondary/50 p-3 rounded-lg flex items-center space-x-4 transition-all duration-200 ${isDragOver ? 'bg-accent/20 ring-2 ring-accent' : ''}`}
+      className={`relative bg-secondary/50 p-3 rounded-lg transition-all duration-200 ${isDragOver ? 'bg-accent/20 ring-2 ring-accent' : ''}`}
     >
-      {showDragHandle && (
-        <div className="cursor-grab text-gray-500 hover:text-white" title="Kéo để sắp xếp">
-          <GripVerticalIcon className="w-5 h-5" />
+      <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+        <div className="flex items-center space-x-4 flex-1">
+            {showDragHandle && (
+                <div className="cursor-grab text-gray-500 hover:text-white" title="Kéo để sắp xếp">
+                <GripVerticalIcon className="w-5 h-5" />
+                </div>
+            )}
+            <div className="flex-shrink-0">
+                <img src={file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined} alt={file.name} className={`w-10 h-10 object-cover rounded ${file.type.startsWith('image/') ? '' : 'hidden'}`} />
+                <div className={file.type.startsWith('image/') ? 'hidden' : ''}>
+                    <PdfIcon className="w-10 h-10 text-red-400" />
+                </div>
+            </div>
+            <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-primary-foreground truncate" title={file.name}>
+                {file.name}
+                </p>
+                <p className="text-xs text-gray-400 flex items-center gap-2">
+                <span>{formatBytes(originalSize)}</span>
+                {pageCount !== undefined && (
+                    <span className="bg-primary/50 px-1.5 py-0.5 rounded text-xs text-gray-300">{pageCount} trang</span>
+                )}
+                {status === FileStatus.Done && compressedSize && (appMode === 'compress') && (
+                    <>
+                    <span className="mx-1">&rarr;</span>
+                    {formatBytes(compressedSize)}
+                    <span className={`ml-2 font-semibold ${reduction > 0 ? 'text-green-400' : 'text-gray-400'}`}>
+                        ({reduction > 0 ? `-${reduction.toFixed(1)}%` : '0%'})
+                    </span>
+                    </>
+                )}
+                </p>
+            </div>
         </div>
-      )}
-      <div className="flex-shrink-0">
-         <img src={file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined} alt={file.name} className={`w-10 h-10 object-cover rounded ${file.type.startsWith('image/') ? '' : 'hidden'}`} />
-         <div className={file.type.startsWith('image/') ? 'hidden' : ''}>
-            <PdfIcon className="w-10 h-10 text-red-400" />
-         </div>
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-primary-foreground truncate" title={file.name}>
-          {file.name}
-        </p>
-        <p className="text-xs text-gray-400">
-          {formatBytes(originalSize)}
-          {status === FileStatus.Done && compressedSize && appMode === 'compress' && (
-            <>
-              <span className="mx-1">&rarr;</span>
-              {formatBytes(compressedSize)}
-              <span className="ml-2 text-green-400 font-semibold">
-                (-{reduction.toFixed(1)}%)
-              </span>
-            </>
-          )}
-        </p>
-      </div>
-      <div className="flex items-center space-x-3 w-48 justify-end">
-        <div className="w-full text-center">
-            <StatusIndicator />
+        
+        {appMode === 'extract' && status === FileStatus.Waiting && (
+            <div className="w-full sm:w-auto">
+                <input 
+                    type="text" 
+                    placeholder={pageCount ? `VD: 1-3, 5 (Max ${pageCount})` : "VD: 1-3, 5, 8-10"} 
+                    value={extractPageRange || ''}
+                    onChange={(e) => onUpdatePageRange(id, e.target.value)}
+                    className="w-full sm:w-48 px-3 py-1.5 text-sm bg-primary/70 border border-secondary rounded-md text-primary-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+                />
+            </div>
+        )}
+
+        <div className="flex items-center space-x-3 w-full sm:w-auto justify-end">
+            <div className="w-32 text-center">
+                <StatusIndicator />
+            </div>
+            {/* Quick Extract Button available in all modes for PDFs */}
+            {appMode !== 'extract' && file.type === 'application/pdf' && (
+                <button 
+                    onClick={() => setShowQuickExtract(!showQuickExtract)} 
+                    className={`p-2 rounded-full hover:bg-primary/50 ${showQuickExtract ? 'text-accent bg-primary/50' : 'text-gray-400 hover:text-accent'}`}
+                    title="Trích xuất nhanh"
+                >
+                    <SplitIcon className="w-5 h-5" />
+                </button>
+            )}
+            {isDownloadable && (
+                <a href={downloadUrl} download={appMode === 'extract' ? `extracted_${file.name}` : file.name} className="p-2 text-gray-400 hover:text-accent rounded-full" title="Tải xuống tệp">
+                    <DownloadIcon className="w-5 h-5" />
+                </a>
+            )}
+            <button onClick={() => onRemove(id)} className="p-2 text-gray-400 hover:text-red-500 rounded-full" title="Xóa tệp">
+                <TrashIcon className="w-5 h-5" />
+            </button>
         </div>
       </div>
-      {isDownloadable && (
-        <a href={downloadUrl} download={file.name} className="p-2 text-gray-400 hover:text-accent rounded-full" title="Tải xuống tệp đã nén">
-            <DownloadIcon className="w-5 h-5" />
-        </a>
+
+      {showQuickExtract && appMode !== 'extract' && (
+          <div className="mt-3 pt-3 border-t border-secondary flex items-center gap-3 animate-fade-in">
+              <span className="text-xs text-gray-400 whitespace-nowrap">Trích xuất nhanh:</span>
+              <input 
+                  type="text" 
+                  placeholder={pageCount ? `VD: 1, 3 (Max ${pageCount})` : "VD: 1, 3, 5-10"} 
+                  value={quickExtractRange}
+                  onChange={(e) => setQuickExtractRange(e.target.value)}
+                  className="flex-1 px-3 py-1.5 text-sm bg-primary/70 border border-secondary rounded-md text-primary-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+              />
+              <button 
+                onClick={handleQuickExtractSubmit}
+                disabled={!quickExtractRange.trim()}
+                className="px-3 py-1.5 text-xs font-medium bg-accent text-accent-foreground rounded hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+              >
+                  Tải về ngay
+              </button>
+          </div>
       )}
-      <button onClick={() => onRemove(id)} className="p-2 text-gray-400 hover:text-red-500 rounded-full" title="Xóa tệp">
-        <TrashIcon className="w-5 h-5" />
-      </button>
     </div>
   );
 };

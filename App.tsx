@@ -5,7 +5,7 @@ import FileItem from './components/FileItem.tsx';
 import AccessControl from './components/AccessControl.tsx';
 import AdminPanel from './components/AdminPanel.tsx';
 import { HPLogo } from './components/HPLogo.tsx';
-import { LogOutIcon, UsersIcon, CompressIcon, MergeIcon, ImageToPdfIcon, ArrowLeftIcon, WandIcon, PieChartIcon, XIcon } from './components/icons.tsx';
+import { LogOutIcon, UsersIcon, CompressIcon, MergeIcon, ImageToPdfIcon, ArrowLeftIcon, WandIcon, PieChartIcon, XIcon, SplitIcon, DownloadIcon } from './components/icons.tsx';
 import { GoogleGenAI, Modality } from "@google/genai";
 
 // Khai báo các thư viện được tải từ CDN trên đối tượng window
@@ -24,6 +24,7 @@ const DEFAULT_USER_PERMISSIONS: UserPermissions = {
   canMerge: true,
   canConvertToPdf: true,
   canEnhanceImage: true,
+  canExtract: true,
 };
 
 // Người dùng ban đầu, chỉ được sử dụng nếu localStorage trống
@@ -38,6 +39,7 @@ const initialUsers: User[] = [
       canMerge: true,
       canConvertToPdf: true,
       canEnhanceImage: true,
+      canExtract: true,
     },
   },
 ];
@@ -180,16 +182,47 @@ const App: React.FC = () => {
   };
 
 
-  const handleFilesAdded = useCallback((newFiles: File[]) => {
-    const processed = newFiles.map(file => ({
+  const handleFilesAdded = useCallback(async (newFiles: File[]) => {
+    // Tạo mảng file xử lý ban đầu
+    const initialProcessedFiles = newFiles.map(file => ({
       id: `${file.name}-${file.lastModified}-${Math.random()}`,
       file,
       originalSize: file.size,
       status: FileStatus.Waiting,
       progress: 0,
+      extractPageRange: '',
+      pageCount: undefined,
     }));
-    setFiles(prev => [...prev, ...processed]);
+
+    // Thêm vào state ngay lập tức để UI phản hồi nhanh
+    setFiles(prev => [...prev, ...initialProcessedFiles]);
     setCompressionSummary(null);
+
+    // Tính toán số trang bất đồng bộ cho các file PDF
+    const updatedFilesWithPages = await Promise.all(initialProcessedFiles.map(async (pFile) => {
+      if (pFile.file.type === 'application/pdf') {
+        try {
+          const buffer = await pFile.file.arrayBuffer();
+          // Sử dụng PDFLib để đếm trang
+          if (window.PDFLib) {
+             const { PDFDocument } = window.PDFLib;
+             const pdfDoc = await PDFDocument.load(buffer, { ignoreEncryption: true });
+             return { ...pFile, pageCount: pdfDoc.getPageCount() };
+          }
+        } catch (error) {
+          console.error(`Không thể đọc số trang của file ${pFile.file.name}`, error);
+          return pFile;
+        }
+      }
+      return pFile;
+    }));
+
+    // Cập nhật lại state với thông tin số trang
+    setFiles(prev => prev.map(f => {
+      const updated = updatedFilesWithPages.find(u => u.id === f.id);
+      return updated ? updated : f;
+    }));
+
   }, []);
 
   const handleRemoveFile = useCallback((id: string) => {
@@ -263,6 +296,99 @@ const App: React.FC = () => {
     return { base64: base64Part, mimeType: mimeType || 'image/png' };
   }
 
+  // Extract Pages Helper
+  const parsePageRange = (range: string, maxPages: number): number[] => {
+    const pages = new Set<number>();
+    const parts = range.split(',').map(p => p.trim());
+    
+    parts.forEach(part => {
+        if (part.includes('-')) {
+            const [start, end] = part.split('-').map(num => parseInt(num));
+            if (!isNaN(start) && !isNaN(end)) {
+                for (let i = start; i <= end; i++) {
+                    if (i >= 1 && i <= maxPages) pages.add(i - 1);
+                }
+            }
+        } else {
+            const page = parseInt(part);
+            if (!isNaN(page) && page >= 1 && page <= maxPages) {
+                pages.add(page - 1);
+            }
+        }
+    });
+    
+    return Array.from(pages).sort((a, b) => a - b);
+  };
+
+  const handleUpdatePageRange = (id: string, range: string) => {
+      setFiles(prev => prev.map(f => f.id === id ? { ...f, extractPageRange: range } : f));
+  };
+
+  const handleExtractSingleFile = async (id: string, customRange?: string) => {
+    const fileToExtract = files.find(f => f.id === id);
+    // Nếu có customRange (trích xuất nhanh trong mode khác), ta không cần kiểm tra status
+    const isQuickExtract = !!customRange;
+    const rangeToUse = customRange || fileToExtract?.extractPageRange;
+
+    // Cho phép trích xuất ngay cả khi status là Done (đối với file đã gộp) hoặc Waiting
+    if (!fileToExtract || !rangeToUse) return;
+
+    // Chỉ cập nhật trạng thái UI nếu đang ở mode Extract chính thức
+    if (!isQuickExtract) {
+        setFiles(prev => prev.map(f =>
+            f.id === id ? { ...f, status: FileStatus.Compressing, progress: 0 } : f
+        ));
+    }
+    
+    try {
+        const { PDFDocument } = window.PDFLib;
+        const existingPdfBytes = await fileToExtract.file.arrayBuffer();
+        const pdfDoc = await PDFDocument.load(existingPdfBytes, { ignoreEncryption: true });
+        
+        const pageIndices = parsePageRange(rangeToUse, pdfDoc.getPageCount());
+        
+        if (pageIndices.length === 0) {
+             throw new Error("Phạm vi trang không hợp lệ hoặc không nằm trong tài liệu.");
+        }
+
+        const newPdfDoc = await PDFDocument.create();
+        const copiedPages = await newPdfDoc.copyPages(pdfDoc, pageIndices);
+        
+        copiedPages.forEach((page) => newPdfDoc.addPage(page));
+        
+        const pdfBytes = await newPdfDoc.save();
+        const compressedBlob = new Blob([pdfBytes], { type: 'application/pdf' });
+        const downloadUrl = URL.createObjectURL(compressedBlob);
+        
+        if (!isQuickExtract) {
+            setFiles(prev => prev.map(f => f.id === id ? { 
+                ...f, 
+                status: FileStatus.Done, 
+                compressedSize: compressedBlob.size, 
+                downloadUrl, 
+                progress: 100 
+            } : f));
+        } else {
+            // Nếu là Quick Extract, tự động tải xuống
+            const link = document.createElement('a');
+            link.href = downloadUrl;
+            link.download = `extracted_${fileToExtract.file.name}`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(downloadUrl);
+        }
+
+    } catch (error) {
+        console.error(`Lỗi khi trích xuất tệp ${fileToExtract.file.name}:`, error);
+        alert(`Lỗi: ${(error as Error).message}`);
+        if (!isQuickExtract) {
+             setFiles(prev => prev.map(f => f.id === id ? { ...f, status: FileStatus.Error, progress: 0 } : f));
+        }
+    }
+  };
+
+
   const compressPdfFile = async (
     file: ProcessedFile,
     level: CompressionLevel,
@@ -280,6 +406,19 @@ const App: React.FC = () => {
         });
         const pdfBytes = await pdfDoc.save();
         const compressedBlob = new Blob([pdfBytes], { type: 'application/pdf' });
+        
+        // Kiểm tra nếu nén làm tăng dung lượng (hoặc không giảm đáng kể)
+        if (compressedBlob.size >= file.originalSize) {
+             onProgress(100);
+             return {
+                ...file,
+                status: FileStatus.Done,
+                compressedSize: file.originalSize,
+                downloadUrl: URL.createObjectURL(file.file), // Tải file gốc
+                progress: 100,
+            };
+        }
+
         const downloadUrl = URL.createObjectURL(compressedBlob);
         onProgress(100);
         return {
@@ -342,6 +481,19 @@ const App: React.FC = () => {
 
       const pdfBytes = await newPdfDoc.save();
       const compressedBlob = new Blob([pdfBytes], { type: 'application/pdf' });
+      
+      // Kiểm tra nếu nén làm tăng dung lượng
+      if (compressedBlob.size >= file.originalSize) {
+            onProgress(100);
+            return {
+            ...file,
+            status: FileStatus.Done,
+            compressedSize: file.originalSize,
+            downloadUrl: URL.createObjectURL(file.file), // Tải file gốc
+            progress: 100,
+        };
+      }
+
       const downloadUrl = URL.createObjectURL(compressedBlob);
       onProgress(100);
 
@@ -432,7 +584,7 @@ const App: React.FC = () => {
     const zipBlob = await zip.generateAsync({ type: 'blob' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(zipBlob);
-    link.download = 'compressed_pdfs.zip';
+    link.download = 'files.zip';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -457,16 +609,28 @@ const App: React.FC = () => {
         copiedPages.forEach((page) => mergedPdf.addPage(page));
         setFiles(prev => prev.map(f => f.id === file.id ? {...f, status: FileStatus.Done, progress: 100} : f));
       }
+      
       const mergedPdfBytes = await mergedPdf.save();
       const blob = new Blob([mergedPdfBytes], { type: 'application/pdf' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = 'merged_document.pdf';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      
+      // Tạo file mới đại diện cho file đã gộp
+      const newFileName = `merged_${Date.now()}.pdf`;
+      const newFileObj = new File([blob], newFileName, { type: 'application/pdf' });
+      
+      const newProcessedFile: ProcessedFile = {
+        id: `merged-${Date.now()}`,
+        file: newFileObj,
+        originalSize: blob.size,
+        status: FileStatus.Done, // Đánh dấu là Done để có thể tải xuống hoặc thao tác tiếp
+        progress: 100,
+        extractPageRange: '',
+        pageCount: mergedPdf.getPageCount(),
+        downloadUrl: URL.createObjectURL(blob),
+      };
+      
+      // Thêm file mới vào danh sách
+      setFiles(prev => [...prev, newProcessedFile]);
+
     } catch (error) {
       console.error("Lỗi khi gộp PDF:", error);
       alert("Đã xảy ra lỗi trong quá trình gộp tệp. Vui lòng thử lại.");
@@ -475,6 +639,15 @@ const App: React.FC = () => {
       setIsProcessing(false);
     }
   };
+  
+  const handleExtractAll = async () => {
+      const filesToExtract = files.filter(f => f.status === FileStatus.Waiting && f.extractPageRange);
+      if (filesToExtract.length === 0) return;
+      
+      setIsProcessing(true);
+      await Promise.all(filesToExtract.map(file => handleExtractSingleFile(file.id)));
+      setIsProcessing(false);
+  }
 
   const handleConvertImagesToPdf = async () => {
     if (files.length === 0) return;
@@ -748,6 +921,7 @@ const App: React.FC = () => {
     switch (appMode) {
       case 'compress':
       case 'merge':
+      case 'extract':
         return 'application/pdf';
       case 'imageToPdf':
       case 'enhanceImage':
@@ -763,6 +937,7 @@ const App: React.FC = () => {
       case 'merge': return 'Kéo và thả các tệp PDF để gộp';
       case 'imageToPdf': return 'Kéo và thả tệp ảnh vào đây';
       case 'enhanceImage': return 'Kéo và thả ảnh cần làm nét';
+      case 'extract': return 'Kéo và thả tệp PDF cần trích xuất';
       default: return 'Kéo và thả tệp';
     }
   };
@@ -773,6 +948,7 @@ const App: React.FC = () => {
       case 'merge': return 'Các tệp sẽ được gộp theo thứ tự hiển thị.';
       case 'imageToPdf': return 'Chấp nhận tệp JPG và PNG. Sắp xếp ảnh trước khi chuyển đổi.';
       case 'enhanceImage': return 'Chấp nhận tệp JPG và PNG. Mỗi ảnh sẽ được xử lý riêng lẻ.';
+      case 'extract': return 'Chỉ chấp nhận tệp PDF. Bạn có thể chọn trang sau khi tải lên.';
       default: return '';
     }
   };
@@ -783,6 +959,7 @@ const App: React.FC = () => {
         case 'merge': return 'Trình Gộp PDF';
         case 'imageToPdf': return 'Chuyển Ảnh sang PDF';
         case 'enhanceImage': return 'Studio Tinh Chỉnh Ảnh AI';
+        case 'extract': return 'Trích Xuất Trang PDF';
         default: return '';
     }
   };
@@ -833,6 +1010,18 @@ const App: React.FC = () => {
             {isProcessing ? 'Đang xử lý...' : `Làm nét tất cả (${waitingFilesCount})`}
           </button>
         );
+      case 'extract':
+        const validExtractCount = files.filter(f => f.status === FileStatus.Waiting && f.extractPageRange).length;
+        return (
+            <button
+            onClick={handleExtractAll}
+            disabled={isProcessing || validExtractCount === 0 || !currentUser.permissions.canExtract}
+            className="w-full sm:w-auto px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-accent-foreground bg-accent hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-accent focus:ring-offset-primary"
+            title={!currentUser.permissions.canExtract ? "Bạn không có quyền này" : ""}
+            >
+            {isProcessing ? 'Đang xử lý...' : `Trích xuất (${validExtractCount})`}
+            </button>
+        );
       default:
         return null;
     }
@@ -872,7 +1061,7 @@ const App: React.FC = () => {
              <HPLogo className="h-10 w-10 text-accent" />
             <div>
               <h1 className="text-xl font-bold">PDF Toolkit</h1>
-              <p className="text-xs text-gray-400">Cung cấp bởi Hai Pham</p>
+              <p className="text-xs text-gray-400">Bộ công cụ xử lý file pdf</p>
             </div>
           </div>
           <div className="flex items-center gap-4">
@@ -905,9 +1094,9 @@ const App: React.FC = () => {
          <main className="container mx-auto p-4 md:p-8 flex flex-col items-center justify-center flex-1">
           <div className="max-w-4xl mx-auto text-center">
             <h2 className="text-3xl font-bold tracking-tight text-primary-foreground sm:text-4xl">Bộ công cụ PDF & Ảnh của bạn</h2>
-            <p className="mt-4 text-lg text-gray-400">Chọn một công cụ để bắt đầu.</p>
+            <p className="mt-4 text-lg text-gray-400">Lựa chọn một công cụ pdf để thực hiện.</p>
           </div>
-          <div className="mt-12 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 w-full max-w-7xl">
+          <div className="mt-12 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 w-full max-w-7xl">
             <ToolCard 
                 icon={<CompressIcon className="w-8 h-8" />}
                 title="Nén PDF"
@@ -920,6 +1109,14 @@ const App: React.FC = () => {
                 description="Kết hợp nhiều tệp PDF thành một tài liệu duy nhất."
                 onClick={() => handleSelectMode('merge')}
                 disabled={!currentUser.permissions.canMerge}
+                disabledTitle="Bạn không có quyền này"
+            />
+            <ToolCard 
+                icon={<SplitIcon className="w-8 h-8" />}
+                title="Trích xuất PDF"
+                description="Tách các trang cụ thể từ tệp PDF của bạn."
+                onClick={() => handleSelectMode('extract')}
+                disabled={!currentUser.permissions.canExtract}
                 disabledTitle="Bạn không có quyền này"
             />
             <ToolCard 
@@ -959,116 +1156,83 @@ const App: React.FC = () => {
                             id="compression-level"
                             value={compressionLevel}
                             onChange={(e) => setCompressionLevel(e.target.value as CompressionLevel)}
-                            className="bg-primary border border-secondary text-sm rounded-lg focus:ring-accent focus:border-accent p-2"
+                            className="bg-primary border border-secondary text-primary-foreground text-xs rounded p-1.5 focus:outline-none focus:ring-1 focus:ring-accent"
                         >
-                            <option value="light">Nhẹ (chất lượng tốt nhất)</option>
-                            <option value="recommended">Khuyến nghị (Cân bằng chất lượng và kích thước)</option>
-                            <option value="high">Cao (Kích thước nhỏ, chất lượng ảnh giảm)</option>
-                            <option value="extreme">Cực cao (Kích thước nhỏ nhất)</option>
+                            <option value="light">Nhẹ (Cơ bản)</option>
+                            <option value="recommended">Khuyên dùng (Tốt nhất)</option>
+                            <option value="high">Cao (Giảm nhiều)</option>
+                            <option value="extreme">Cực cao (Giảm tối đa)</option>
                         </select>
                     </div>
                     )}
+                     <div className="flex items-center gap-3 w-full sm:w-auto">
+                         {files.length > 0 && (
+                             <button onClick={handleClearAll} className="text-sm text-red-400 hover:text-red-300">
+                                 Xóa tất cả
+                             </button>
+                         )}
+                        <MainActionButton />
+                    </div>
                 </div>
             </div>
 
-            {appMode === 'compress' && compressionSummary && (
-                <div className="bg-secondary/50 p-4 rounded-lg mb-6 relative animate-fade-in">
-                    <button 
-                        onClick={() => setCompressionSummary(null)} 
-                        className="absolute top-2 right-2 p-1 rounded-full text-gray-400 hover:bg-primary/50 hover:text-white"
-                        aria-label="Đóng tóm tắt"
-                    >
-                        <XIcon className="w-5 h-5" />
-                    </button>
-                    <div className="flex items-center gap-4">
-                        <div className="flex-shrink-0 bg-green-500/10 p-3 rounded-full">
-                            <PieChartIcon className="w-8 h-8 text-green-400" />
-                        </div>
-                        <div>
-                            <h3 className="text-lg font-semibold text-primary-foreground">Đã nén xong!</h3>
-                            <p className="text-sm text-gray-400">
-                                Đã xử lý {compressionSummary.successCount}/{compressionSummary.totalCount} tệp thành công.
-                            </p>
-                        </div>
+            {compressionSummary && appMode === 'compress' && (
+              <div className="mb-6 p-4 bg-secondary/50 rounded-lg flex items-center justify-between animate-fade-in">
+                <div className="flex items-center gap-3">
+                    <div className="bg-accent/20 p-2 rounded-full text-accent">
+                        <PieChartIcon className="w-6 h-6" />
                     </div>
-                    <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
-                        <div>
-                            <p className="text-sm text-gray-400">Dung lượng gốc</p>
-                            <p className="text-lg font-bold text-primary-foreground">{formatBytes(compressionSummary.totalOriginal)}</p>
-                        </div>
-                        <div>
-                            <p className="text-sm text-gray-400">Dung lượng mới</p>
-                            <p className="text-lg font-bold text-primary-foreground">{formatBytes(compressionSummary.totalCompressed)}</p>
-                        </div>
-                        <div>
-                            <p className="text-sm text-gray-400">Tiết kiệm được</p>
-                            <p className="text-lg font-bold text-green-400">
-                                {formatBytes(compressionSummary.totalOriginal - compressionSummary.totalCompressed)} 
-                                ({((1 - compressionSummary.totalCompressed / compressionSummary.totalOriginal) * 100).toFixed(1)}%)
-                            </p>
-                        </div>
+                    <div>
+                        <p className="text-sm font-medium">Đã nén xong {compressionSummary.successCount}/{compressionSummary.totalCount} tệp</p>
+                        <p className="text-xs text-gray-400">
+                            Tổng: {formatBytes(compressionSummary.totalOriginal)} &rarr; {formatBytes(compressionSummary.totalCompressed)} 
+                            <span className="text-green-400 ml-1 font-bold">
+                                (-{((compressionSummary.totalOriginal - compressionSummary.totalCompressed) / compressionSummary.totalOriginal * 100).toFixed(1)}%)
+                            </span>
+                        </p>
                     </div>
                 </div>
+                {currentUser.permissions.canDownloadBatch && (
+                     <button
+                        onClick={handleDownloadAll}
+                        disabled={isZipping}
+                        className="flex items-center px-4 py-2 text-sm font-medium bg-primary hover:bg-primary/80 rounded-md transition-colors"
+                    >
+                        {isZipping ? <span className="animate-spin mr-2">⏳</span> : <DownloadIcon className="w-4 h-4 mr-2" />}
+                        Tải tất cả (ZIP)
+                    </button>
+                )}
+              </div>
             )}
 
-
-            <FileUpload 
+            <div className="space-y-4">
+               {files.map((file, index) => (
+                <FileItem
+                  key={file.id}
+                  processedFile={file}
+                  onRemove={handleRemoveFile}
+                  onCompressSingle={handleCompressSingleFile}
+                  onEnhanceSingle={handleEnhanceSingleFile}
+                  onExtractSingle={handleExtractSingleFile}
+                  onUpdatePageRange={handleUpdatePageRange}
+                  onSendEnhancementPrompt={handleSendEnhancementPrompt}
+                  currentUser={currentUser}
+                  appMode={appMode}
+                  index={index}
+                  onDragStart={handleDragStart}
+                  onDragOver={(e) => handleDragOver(e, index)}
+                  onDrop={handleDrop}
+                  onDragLeave={handleDragLeave}
+                  isDragOver={dragOverIndex === index}
+                />
+              ))}
+               <FileUpload
                 onFilesAdded={handleFilesAdded}
                 acceptedMimeTypes={getAcceptedMimeTypes()}
                 promptText={getPromptText()}
                 fileTypeDescription={getFileTypeDescription()}
-            />
-
-            {files.length > 0 && (
-                <div className="mt-8">
-                <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-lg font-semibold">
-                    Tệp đã tải lên ({files.length})
-                    </h2>
-                    <button
-                    onClick={handleClearAll}
-                    className="px-4 py-2 text-sm font-medium text-gray-300 bg-secondary/70 hover:bg-destructive/80 rounded-md"
-                    >
-                    Xóa tất cả
-                    </button>
-                </div>
-
-                <div className="space-y-3" onDrop={handleDrop} onDragOver={(e) => e.preventDefault()} onDragLeave={handleDragLeave}>
-                    {files.map((file, index) => (
-                    <FileItem
-                        key={file.id}
-                        processedFile={file}
-                        onRemove={handleRemoveFile}
-                        onCompressSingle={handleCompressSingleFile}
-                        onEnhanceSingle={handleEnhanceSingleFile}
-                        onSendEnhancementPrompt={handleSendEnhancementPrompt}
-                        currentUser={currentUser}
-                        appMode={appMode}
-                        index={index}
-                        onDragStart={handleDragStart}
-                        onDragOver={(e) => handleDragOver(e, index)}
-                        onDrop={handleDrop}
-                        onDragLeave={handleDragLeave}
-                        isDragOver={dragOverIndex === index}
-                    />
-                    ))}
-                </div>
-
-                <div className="mt-6 flex flex-col sm:flex-row justify-end items-center gap-4">
-                    {appMode === 'compress' && (
-                    <button
-                        onClick={handleDownloadAll}
-                        disabled={isZipping || !files.some(f => f.status === FileStatus.Done) || !currentUser.permissions.canDownloadBatch}
-                        className="w-full sm:w-auto px-6 py-3 border border-accent text-accent hover:bg-accent/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium rounded-md"
-                        title={!currentUser.permissions.canDownloadBatch ? "Bạn không có quyền này" : ""}
-                    >
-                        {isZipping ? 'Đang tạo tệp ZIP...' : 'Tải xuống tất cả (.zip)'}
-                    </button>
-                    )}
-                    <MainActionButton />
-                </div>
-                </div>
-            )}
+              />
+            </div>
             </div>
         </main>
       )}

@@ -7,7 +7,7 @@ export enum FileStatus {
 
 export type CompressionLevel = 'light' | 'recommended' | 'high' | 'extreme';
 
-export type AppMode = 'compress' | 'merge' | 'imageToPdf' | 'enhanceImage';
+export type AppMode = 'compress' | 'merge' | 'imageToPdf' | 'enhanceImage' | 'extract';
 
 export interface EnhancementStep {
   prompt: string;
@@ -23,6 +23,8 @@ export interface ProcessedFile {
   downloadUrl?: string;
   progress?: number;
   enhancementHistory?: EnhancementStep[];
+  extractPageRange?: string; // Ví dụ: "1-5, 8, 11-13"
+  pageCount?: number; // Tổng số trang của file PDF
 }
 
 export interface UserPermissions {
@@ -31,6 +33,7 @@ export interface UserPermissions {
   canMerge: boolean;
   canConvertToPdf: boolean;
   canEnhanceImage: boolean;
+  canExtract: boolean;
 }
 
 export interface User {

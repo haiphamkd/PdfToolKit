@@ -64,6 +64,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ onFilesAdded, acceptedMimeTypes
         type="file"
         ref={fileInputRef}
         onChange={handleFileSelect}
+        onClick={(e) => (e.currentTarget.value = '')}
         accept={acceptedMimeTypes}
         multiple
         className="hidden"

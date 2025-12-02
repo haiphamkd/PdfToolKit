@@ -164,7 +164,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, currentUser, onAddUser, 
                         </button>
                     </div>
                 </div>
-                <div className="mt-3 pt-3 border-t border-primary/80 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4 text-sm">
+                <div className="mt-3 pt-3 border-t border-primary/80 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4 text-sm">
                     <label className="flex items-center space-x-2 cursor-pointer">
                         <input 
                             type="checkbox"
@@ -173,7 +173,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, currentUser, onAddUser, 
                             disabled={user.username === currentUser.username}
                             className="form-checkbox h-4 w-4 rounded bg-primary/70 border-secondary text-accent focus:ring-accent disabled:opacity-50"
                         />
-                        <span className={user.username === currentUser.username ? 'text-gray-500' : ''}>Nén Hàng loạt</span>
+                        <span className={user.username === currentUser.username ? 'text-gray-500' : ''}>Nén PDF</span>
                     </label>
                      <label className="flex items-center space-x-2 cursor-pointer">
                         <input 
@@ -183,7 +183,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, currentUser, onAddUser, 
                             disabled={user.username === currentUser.username}
                             className="form-checkbox h-4 w-4 rounded bg-primary/70 border-secondary text-accent focus:ring-accent disabled:opacity-50"
                         />
-                        <span className={user.username === currentUser.username ? 'text-gray-500' : ''}>Tải Hàng loạt</span>
+                        <span className={user.username === currentUser.username ? 'text-gray-500' : ''}>Tải về</span>
                     </label>
                     <label className="flex items-center space-x-2 cursor-pointer">
                         <input 
@@ -198,12 +198,22 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, currentUser, onAddUser, 
                     <label className="flex items-center space-x-2 cursor-pointer">
                         <input 
                             type="checkbox"
+                            checked={user.permissions.canExtract}
+                            onChange={(e) => handlePermissionChange(user.username, 'canExtract', e.target.checked)}
+                            disabled={user.username === currentUser.username}
+                            className="form-checkbox h-4 w-4 rounded bg-primary/70 border-secondary text-accent focus:ring-accent disabled:opacity-50"
+                        />
+                        <span className={user.username === currentUser.username ? 'text-gray-500' : ''}>Trích xuất</span>
+                    </label>
+                    <label className="flex items-center space-x-2 cursor-pointer">
+                        <input 
+                            type="checkbox"
                             checked={user.permissions.canConvertToPdf}
                             onChange={(e) => handlePermissionChange(user.username, 'canConvertToPdf', e.target.checked)}
                             disabled={user.username === currentUser.username}
                             className="form-checkbox h-4 w-4 rounded bg-primary/70 border-secondary text-accent focus:ring-accent disabled:opacity-50"
                         />
-                        <span className={user.username === currentUser.username ? 'text-gray-500' : ''}>Ảnh sang PDF</span>
+                        <span className={user.username === currentUser.username ? 'text-gray-500' : ''}>Ảnh > PDF</span>
                     </label>
                     <label className="flex items-center space-x-2 cursor-pointer">
                         <input 
@@ -213,7 +223,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, currentUser, onAddUser, 
                             disabled={user.username === currentUser.username}
                             className="form-checkbox h-4 w-4 rounded bg-primary/70 border-secondary text-accent focus:ring-accent disabled:opacity-50"
                         />
-                        <span className={user.username === currentUser.username ? 'text-gray-500' : ''}>Làm Nét Ảnh</span>
+                        <span className={user.username === currentUser.username ? 'text-gray-500' : ''}>Làm Nét</span>
                     </label>
                 </div>
               </div>
